@@ -75,13 +75,15 @@ if __name__ == "__main__":
     writer = csv.writer(f)
     attribute = 'body' if CONTENT_TYPE == 'comment' else 'selftext'
     for day in range(1,RANGE):
-        time.sleep(SLEEP_TIME)
         if SUBREDDITS == []:
             
             # Format the pushshift url according to the query 
             base = '{}/?q={}&after={}d&before={}d'.format(CONTENT_TYPE, KEYWORD, RANGE - day, RANGE - day - 1)        
             URL = 'https://api.pushshift.io/reddit/search/{}&sort_type=score&sort=desc&size=1000&fields=selftext,created_utc'.format(base)
             docs = requests.get(URL).json()['data']
+            
+            # Pausing helps to prevent a KeyError
+            time.sleep(SLEEP_TIME)
             
             # Write data to file
             row = aggregate(docs, CONTENT_TYPE, subreddit=None)
