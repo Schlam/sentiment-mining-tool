@@ -16,6 +16,7 @@ import numpy as np
 import requests
 import time
 import csv
+import sys
 
 FILENAME       =   "_sentiment.csv"     # Designate filename to write data into
 CONTENT_TYPE   =   "submission"         # Choose "submission" or "comment"
@@ -23,7 +24,7 @@ KEYWORD        =   "tesla"              # Choose keyword to filter text by
 DIRECTORY      =   "./"                 # Set directory to write file into
 RANGE          =   365                  # How many days to extend the query
 SUBREDDITS     =   []                   # Leave empty to search all subreddits
-SLEEP_TIME     =   1                    # Time to pause between requests
+SLEEP_TIME     =   0                    # Time to pause between requests
 
 # Lambda function to contain long if/else construct
 date_format = lambda a: "{}-0{}-0{}".format(a.year, a.month, a.day) if( a.month < 10 and a.day < 10) else "{}-0{}-{}".format(a.year, a.month, a.day) if( a.month < 10 and a.day >= 10) else "{}-{}-0{}".format(a.year, a.month, a.day) if( a.month >= 10 and a.day < 10) else "{}-{}-{}".format(a.year, a.month, a.day)
@@ -40,17 +41,13 @@ def aggregate(documents, content, subreddit):
     total = np.zeros(4)    
     attribute = 'body' if content == 'comment' else 'selftext'
     for doc in documents:
-        try:
-            if doc['selftext'] == "":
-                frequency -= 1
-            else:
-                text, utc = doc[attribute], doc['created_utc']
-                sent = analyzer.polarity_scores(text)     
-                formatted_date = format_date(utc) 
-                total += np.array([sent['pos'],sent['neg'],sent['neu'],sent['compound']])
-        except KeyError:
-            print("KeyError")
+        if doc['selftext'] == "":
             frequency -= 1
+        else:
+            text, utc = doc[attribute], doc['created_utc']
+            sent = analyzer.polarity_scores(text)     
+            formatted_date = format_date(utc) 
+            total += np.array([sent['pos'],sent['neg'],sent['neu'],sent['compound']])
 
     data = [formatted_date, frequency] + [val for val in total]
     
@@ -59,42 +56,29 @@ def aggregate(documents, content, subreddit):
     
     return data
 
-if __name__ == "__main__":
 
-    print("\nCurrent settings:\n\n",\
-        '''
-        FILENAME       =   "_sentiment.csv"     # Designate filename to write data into
-        CONTENT_TYPE   =   "submission"         # Choose "submission" or "comment"
-        KEYWORD        =   "tesla"              # Choose keyword to filter text by
-        DIRECTORY      =   "./"                 # Set directory to write file into
-        RANGE          =   365                  # How many days to extend the query
-        SUBREDDITS     =   []                   # Leave empty to search all subreddits
-        SLEEP_TIME     =   1                    # Time to pause between requests
-        ''',"\n\nSearching Reddit for {}s mentioning {} :\n".format(CONTENT_TYPE, KEYWORD))
-    f = open(DIRECTORY+KEYWORD+FILENAME, "wt")
-    writer = csv.writer(f)
-    attribute = 'body' if CONTENT_TYPE == 'comment' else 'selftext'
-    for day in range(1,RANGE):
-        if SUBREDDITS == []:
-            
-            # Format the pushshift url according to the query 
-            base = '{}/?q={}&after={}d&before={}d'.format(CONTENT_TYPE, KEYWORD, RANGE - day, RANGE - day - 1)        
+f = open(DIRECTORY+KEYWORD+FILENAME, "wt")
+writer = csv.writer(f)
+attribute = 'body' if CONTENT_TYPE == 'comment' else 'selftext'
+for day in range(1,RANGE):
+    time.sleep(SLEEP_TIME)
+    if SUBREDDITS == []:
+        
+        # Format the pushshift url according to the query 
+        base = '{}/?q={}&after={}d&before={}d'.format(CONTENT_TYPE, KEYWORD, RANGE - day, RANGE - day - 1)        
+        URL = 'https://api.pushshift.io/reddit/search/{}&sort_type=score&sort=desc&size=1000&fields=selftext,created_utc'.format(base)
+        docs = requests.get(URL).json()['data']
+        
+        # Write data to file
+        row = aggregate(docs, CONTENT_TYPE, subreddit=None)
+        writer.writerow(row)
+
+    else:  
+        for SUB in SUBREDDITS:
+            base = '{}/?q={}&subreddit={}&after={}d&before={}d'.format(CONTENT_TYPE, KEYWORD, SUB, RANGE - day, RANGE - day - 1)        
             URL = 'https://api.pushshift.io/reddit/search/{}&sort_type=score&sort=desc&size=1000&fields=selftext,created_utc'.format(base)
             docs = requests.get(URL).json()['data']
-            
-            # Pausing helps to prevent a KeyError
-            time.sleep(SLEEP_TIME)
-            
-            # Write data to file
-            row = aggregate(docs, CONTENT_TYPE, subreddit=None)
+            row = aggregate(docs, CONTENT_TYPE, SUB)
             writer.writerow(row)
 
-        else:  
-            for SUB in SUBREDDITS:
-                base = '{}/?q={}&subreddit={}&after={}d&before={}d'.format(CONTENT_TYPE, KEYWORD, SUB, RANGE - day, RANGE - day - 1)        
-                URL = 'https://api.pushshift.io/reddit/search/{}&sort_type=score&sort=desc&size=1000&fields=selftext,created_utc'.format(base)
-                docs = requests.get(URL).json()['data']
-                row = aggregate(docs, CONTENT_TYPE, SUB)
-                writer.writerow(row)
-
-        print("Day {}/{}, {} {}s".format(day, RANGE, len(docs), CONTENT_TYPE))
+    print("Day {}/{}, {} {}s".format(day, RANGE, len(docs), CONTENT_TYPE))
