@@ -4,18 +4,26 @@ from datetime import datetime
 import requests
 import time
 import csv
-"""
+'''
 Author: Sam Bellenchia
-Github: github.com/schlam/sentiment-mining-tool
+Last Revised: 03/18/20
 
+~~~
+This tool relies heavily on the Pushshift API and vaderSentiment analysis tools
 
-"""
+API documentation found here: 
+github.com/pushshift/api
 
-# Cache data to avoid pickle error
-#@lru_cache(maxsize=256)
+Original code was based on a repo found here:
+github.com/ckw017/pushshift-nlp
+
+Sentiment analyser found here:
+github.com/vaderSentiment
+
+'''
 
 # Format url for specific query
-def get_url(topic,content="submission",after="60s",before="0s",sort_type="score",sort_how='desc',size=1000,features=("title","created_utc", "permalink", "score")):
+def get_url(topic,content="submission",after="60s",before="0s",sort_type="score",sort_how='desc',size=1000,features=("created_utc","selftext", "title", "score")):
     base = 'https://api.pushshift.io/reddit/search/{}/?q={}'.format(content,topic)
     query = '&after={}&before={}'.format(after, before)
     sort = '&sort_type={}&sort={}&size={}'.format(sort_type,sort_how,size)
@@ -34,7 +42,7 @@ def get_docs(url):
     
 # Index data dictionary
 def get_attributes(doc):
-    features=("title","created_utc", "permalink", "score")
+    features=("created_utc","selftext", "title", "score")
     with ThreadPool(2) as p:
         results = p.map(lambda x: doc[x],features)
         return results
@@ -53,7 +61,7 @@ def write_data(data, fname):
         return "Query returned no results. No data written to csv"
     with open(fname, "wt") as f:
         writer = csv.writer(f)
-        writer.writerow(["title","created_utc", "permalink", "score"])
+        writer.writerow(["created_utc","selftext", "title", "score"])
         for row in data:
             writer.writerow(row)
         f.close()
